@@ -16,6 +16,7 @@ import MySQLdb
 from twisted.enterprise import adbapi
 import MySQLdb.cursors
 
+
 class ArticlespiderPipeline:
     def process_item(self, item, spider):
         return item
@@ -27,22 +28,26 @@ class ArticlespiderPipeline:
 '''
 class ArticleImagePipeline(ImagesPipeline):
     def item_completed(self, results, item, info):
-        for ok, value in results:
-            image_file_path = value["path"]
-            item["front_image_path"] = image_file_path
+        # 判断下没有封面的情况
+        if "front_image_url" in item:
+            for ok, value in results:
+                image_file_path = value["path"]
+                item["front_image_path"] = image_file_path
         return item
 
 '''
+自己写的导出到json
 这个pipeline可以拦截我们的item
 所以在这个可以将数据保存的mysql中
 先建立一个保存json 的pipeline，叫做jsonWithEncoding
 '''
-#python的继承是写在括号里面的
+# python的继承是写在括号里面的
 class JsonWithEncodingPipeline(object):
     # 自定义json文件的导出
     # 要保存json文件，第一步要打开json文件
     def __init__(self):
         self.file = codecs.open('article.json','w',encoding="utf-8")
+
     # 这个方法是处理item的方法，就是在这里吧数据写入到数据库当中
     def process_item(self,item, spider):
         # 第一步将item准换成字符串
@@ -50,12 +55,14 @@ class JsonWithEncodingPipeline(object):
         # 第二步，将数据字符串写入到文件当中
         self.file.write(lines)
         return item
+
     def spider_closed(self, spider):
         self.file.close()
 
 '''
 scrapy本身也提供了写入json的一种机制
-fieldExport机制可以方便地将json导出成各种类型的文件
+fieldExport机制可以方便地
+将json导出成各种类型的文件
 '''
 class JsonExporterPipeline(object):
     # 调用scrapy提供的jsonexport导出json文件
@@ -72,9 +79,12 @@ class JsonExporterPipeline(object):
         self.exporter.export_item(item)
         return item
 
-'''自定义pipeline写入数据库'''
+
+'''自定义pipeline写入数据库
+# 采用同步的机制写入mysql
+'''
 class MysqlPipeline(object):
-    # 采用同步的机制写入mysql
+
     def __init__(self):
         self.conn = MySQLdb.connect(host='127.0.0.1',port=3306,user='root', passwd='6881385mysql', db = 'article_spider', charset="utf8", use_unicode = True)
         self.cursor = self.conn.cursor()
@@ -87,6 +97,7 @@ class MysqlPipeline(object):
         self.cursor.execute(insert_sql, (item["title"], item["url"], item["create_date"], item["read_nums"]))
         self.conn.commit()
 
+
 '''scrapy提供了连接池，把mysql 插入异步化'''
 class MysqlTwistedPipeline(object):
     # 在启动spider 的时候dbpool就传进来了
@@ -95,7 +106,7 @@ class MysqlTwistedPipeline(object):
 
     @classmethod
     def from_settings(cls, settings):
-        #这个变量名称要和MySQLdb.connections里面的参数名称一样
+        # 这个变量名称要和MySQLdb.connections里面的参数名称一样
         dbparms = dict(
             host = settings["MYSQL_HOST"],
             db = settings["MYSQL_DANAME"],
@@ -105,7 +116,7 @@ class MysqlTwistedPipeline(object):
             cursorclass = MySQLdb.cursors.DictCursor,
             use_unicode = True
         )
-        #adbapi将mysql 操作变成异步化
+        # adbapi将mysql 操作变成异步化
         '''
         可变参数是用在函数的参数传递上的
         单个星号代表这个位置接收任意多个非关键字参数并将其转化成元组

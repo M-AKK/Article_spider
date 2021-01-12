@@ -12,14 +12,17 @@ import re
 from scrapy.http import Request
 from urllib import parse #通过它获取当前域名
 
-from ArticleSpider.items import JobBoleArticleItem
+from ArticleSpider.items import JobBoleArticleItem, ArticleItemLoader
 from ArticleSpider.utils.common import get_md5
 
 import datetime
+# 4-16通过Itemloader来生成我们的item
+from scrapy.loader import ItemLoader
+
 
 class JobboleSpider(scrapy.Spider):
     name = 'jobbole'
-    allowed_domains = ['blog.jobbole.com']#含义是过滤爬取的域名，在插件OffsiteMiddleware启用的情况下（默认是启用的），不在此允许范围内的域名就会被过滤，而不会进行爬取
+    allowed_domains = ['blog.jobbole.com']# 含义是过滤爬取的域名，在插件OffsiteMiddleware启用的情况下（默认是启用的），不在此允许范围内的域名就会被过滤，而不会进行爬取
     start_urls = ['http://www.jobbole.com/caijing/']
 
     def parse(self, response):
@@ -28,26 +31,27 @@ class JobboleSpider(scrapy.Spider):
         2. 获取下一页的url并交给scrapy进行下载，下载完成后交给parse
         '''
 
-        #解析列表页中的所有文章url并交给scrapy下载后并进行解析，#绑定id
-        #post_nodes = response.css("#stock-left-graphic .list-item .content .content-title a::attr(href)").extract()
-        #这个a标签下刚好也有文章详情页的连接
+        # 解析列表页中的所有文章url并交给scrapy下载后并进行解析，#绑定id
+        # post_nodes = response.css("#stock-left-graphic .list-item .content .content-title a::attr(href)").extract()
+        # 这个a标签下刚好也有文章详情页的连接
         post_nodes = response.css("#stock-left-graphic .list-item .img a")
         for post_node in post_nodes:
-            #通过上面的节点直接连接下面的图片的，拼接起来
+            # 通过上面的节点直接连接下面的图片的，拼接起来
             image_url = post_node.css("img::attr(src)").extract_first("")
-            post_url = post_node.css("::attr(href)").extract_first("")
-            #parse.urljoin会自动根据传入的域名获取到主域名
-            yield Request(url=parse.urljoin(response.url, post_url), meta = {"front_image_url" : image_url}, callback=self.parse_detail, dont_filter=True)
+            post_url = post_node.css("::attr(href)").extract_first("") # 详情页url
+            # parse.urljoin会自动根据传入的域名获取到主域名
+            yield Request(url=parse.urljoin(response.url, post_url), meta={"front_image_url":image_url}, callback=self.parse_detail, dont_filter=True)
 
-        #提取下一页并交给scrapy进行下载
+        # 提取下一页并交给scrapy进行下载
         next_urls = response.css("#layui-laypage-1 .a1::attr(href)").extract()[1]
         if next_urls:
             yield Request(url=parse.urljoin(response.url, post_url), callback=self.parse)
 
-    #提取文章具体字段
+    # 提取文章具体字段
     def parse_detail(self, response):
+        '''
+        # 这里相当于把实例化的item附给这里的一个变量，然后对这个变量进行赋值
         article_item = JobBoleArticleItem()
-
         # 直接复制xpath的情况
         title = response.xpath("/html/body/div[3]/div[1]/div[3]/div[1]/h1/text()").extract()[0]
         # 利用class来定位
@@ -79,11 +83,28 @@ class JobboleSpider(scrapy.Spider):
         article_item["front_image_url"] = [front_image_url]
         article_item["read_nums"] = read_nums
         article_item["content"] = content
+        '''
+        # 上面全注释，只用下面几行就够了，改造完成
+        front_image_url = response.meta.get("front_image_url", "")
+        # 通过itemloader加载item
+        item_loader = ArticleItemLoader(item = JobBoleArticleItem(), response = response)
+        # 将数据填充进来
+        item_loader.add_css("title", ".article-head h1::text")
+        #item_loader.add_xpath()
+        #有些不是通过选择器，是直接通过response这种形式
+        item_loader.add_value("url", response.url)
+        item_loader.add_value("url_object_id", get_md5(response.url))
+        item_loader.add_css("create_date", ".about-left span:nth-child(1)::text")
+        item_loader.add_value("front_image_url", [front_image_url])
+        item_loader.add_css("read_nums", '.about-left span:nth-child(2)::text')
+        item_loader.add_xpath("content", '//div[@class="article-main"]')
+
+        article_item = item_loader.load_item()
 
         #通过css选择器提取字段
         '''
         title = response.css(".article-head h1::text").extract()
-        create_date = response.css(".date span::text").extract()[0]
+        create_date = response.css(".about-left span::text").extract()[0]
         #span:nth-child(2)这样来指明是第几个span
         read_nums = response.css('.about-left span:nth-child(2)::text').extract()[0]
         print(read_nums)

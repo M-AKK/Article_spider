@@ -68,7 +68,7 @@ ITEM_PIPELINES = {
    #'ArticleSpider.pipelines.ArticlespiderPipeline': 300,
    #'ArticleSpider.pipelines.JsonExporterPipeline': 2,
    #'scrapy.pipelines.images.ImagesPipeline': 1,
-   #'ArticleSpider.pipelines.ArticleImagePipeline' : 1
+   'ArticleSpider.pipelines.ArticleImagePipeline' : 2,
    'ArticleSpider.pipelines.MysqlTwistedPipeline' : 1
 }
 # 设置我们图片的保存路径
